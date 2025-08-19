@@ -1,0 +1,6 @@
+{
+  "name": "Hebrew Audio Transcription",
+  "description": "An application to transcribe long Hebrew audio files into text with high accuracy using the Gemini API. It supports various audio formats and provides a seamless user experience.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}
