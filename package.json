@@ -9,9 +9,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "react-dom": "^19.1.1",
     "@google/genai": "^1.12.0",
-    "react": "^19.1.1"
+    "fake-indexeddb": "^6.1.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "web-audio-api": "^0.2.2"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

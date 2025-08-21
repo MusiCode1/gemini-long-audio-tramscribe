@@ -1,3 +1,4 @@
+import './utils/polyfill';
 import React, { useState, useCallback, useEffect } from 'react';
 import { ProcessingState, TranscriptionProgress } from './types';
 import FileUpload from './components/FileUpload';
