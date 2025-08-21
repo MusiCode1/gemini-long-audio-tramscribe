@@ -3,11 +3,6 @@ import { isBrowser, isNode } from './env'; // <-- ייבוא כלי העזר
 
 import { debugLog } from './logger';
 
-import "fake-indexeddb/auto";
-import { AudioContext } from 'web-audio-api';
-import { indexedDB } from "fake-indexeddb";
-
-
 // הדפסת הסביבה הנוכחית בעת טעינת המודול
 if (isBrowser) {
     debugLog('Code is running in a Browser environment.');
@@ -15,7 +10,25 @@ if (isBrowser) {
     debugLog('Code is running in a Node.js (Server) environment.');
 }
 
+// אין יותר צורך בפוליפילים גלובליים.
+// המימושים הנפרדים מטפלים בהבדלי הסביבות.
+
 if (!isBrowser) {
-    global.AudioContext || (global.AudioContext = AudioContext);
-    global.indexedDB || (global.indexedDB = indexedDB);
+    globalThis.AudioContext|| ((globalThis.AudioContext as any) = class {
+        constructor(contextOptions?: AudioContextOptions) {
+            throw new Error("AudioContext is not supported in Node.js. Please use a browser environment.");
+        }
+    });
+
+    globalThis.webkitAudioContext || ((globalThis as any).webkitAudioContext = class {
+        constructor() {
+            throw new Error("webkitAudioContext is not supported in Node.js. Please use a browser environment.");
+        }
+    });
+
+    globalThis.indexedDB || ((globalThis as any).indexedDB = {
+        open: () => {
+            throw new Error("indexedDB is not supported in Node.js. Please use a browser environment.");
+        }
+    });
 }

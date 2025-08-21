@@ -1,6 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import { ProcessingState, TranscriptionProgress } from '../types';
-import { chunkAndStoreAudio } from '../utils/audioProcessor';
+import { chunkAndStoreAudio, AudioSource } from '../utils/audioProcessor';
 import { getChunk, clearAllChunks } from '../utils/storage';
 import { debugLog } from '../utils/logger';
 
@@ -74,24 +74,24 @@ function stitch(text1: string, text2: string): string {
 
 /**
  * הפונקציה המרכזית המנהלת את כל תהליך התמלול של קובץ אודיו.
- * @param file קובץ האודיו שהועלה על ידי המשתמש.
+ * @param audioSource אובייקט מקור האודיו.
  * @param prompt הוראות התמלול עבור מודל ה-AI.
  * @param onProgress פונקציית callback לדיווח על התקדמות לממשק המשתמש.
  * @returns מחרוזת המכילה את התמלול הסופי והמלא.
  */
 export async function transcribeAudioFile(
-    file: File,
+    audioSource: AudioSource,
     prompt: string,
     onProgress: (update: TranscriptionProgress) => void
 ): Promise<string> {
-    debugLog('--- Starting new transcription process ---', { file: file.name });
+    debugLog('--- Starting new transcription process ---', { file: audioSource.fileName });
     try {
         // שלב 1: חיתוך קובץ האודיו למקטעים ואחסונם ב-IndexedDB
         onProgress({
             state: ProcessingState.PREPARING,
             message: 'מכין ומקטע את האודיו...',
         });
-        const { totalChunks } = await chunkAndStoreAudio(file, (chunkingMessage) => {
+        const { totalChunks } = await chunkAndStoreAudio(audioSource, (chunkingMessage) => {
             onProgress({ state: ProcessingState.PREPARING, message: chunkingMessage });
         });
         debugLog(`Audio chunking complete. Total chunks: ${totalChunks}`);
@@ -117,7 +117,7 @@ export async function transcribeAudioFile(
                 });
 
                 const resourceName = generateUniqueResourceName(i);
-                const displayName = `chunk_${i}_${file.name}`;
+                const displayName = `chunk_${i}_${audioSource.fileName}`;
 
                 debugLog(`Uploading chunk ${i} to Google AI`, { resourceName, displayName });
                 // העלאת מקטע האודיו לשרתים של גוגל באמצעות ה-File API

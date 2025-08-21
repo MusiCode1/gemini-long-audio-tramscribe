@@ -172,10 +172,19 @@ const App: React.FC = () => {
 
     try {
       debugLog('Calling transcribeAudioFile service...');
-      // קריאה לשירות התמלול עם הקובץ, הפרומפט ופונקציית ה-callback
+      // המרת קובץ ה-File ל-AudioSource שירות התמלול מצפה לקבל
+      const arrayBuffer = await file.arrayBuffer();
+      const audioSource = {
+        arrayBuffer: arrayBuffer,
+        fileName: file.name,
+        mimeType: file.type,
+      };
+      debugLog('Created AudioSource object from File.', audioSource);
+
+      // קריאה לשירות התמלול עם ה-AudioSource, הפרומפט ופונקציית ה-callback
       const finalTranscript = await transcribeAudioFile(
-        file, 
-        transcriptionPrompt, 
+        audioSource,
+        transcriptionPrompt,
         progressCallback
       );
       debugLog('transcribeAudioFile service finished successfully.');

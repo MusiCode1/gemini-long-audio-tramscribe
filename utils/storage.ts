@@ -1,128 +1,29 @@
+import { isBrowser } from './env';
+import * as browserStorage from './storage.browser';
+import * as nodeStorage from './storage.node';
 
-import { debugLog } from './logger';
+// הגדרת סוגי הפונקציות המשותפים
+type SaveChunkFn = (key: number, chunkBlob: Blob, fileName: string) => Promise<void>;
+type GetChunkFn = (key: number) => Promise<File | undefined>;
+type ClearAllChunksFn = () => Promise<void>;
 
-// קבועים עבור הגדרות מסד הנתונים בדפדפן
-const DB_NAME = 'AudioChunksDB';
-const STORE_NAME = 'audioChunks';
-const DB_VERSION = 1;
+// הצהרה על המשתנים שיחזיקו את הפונקציות הנכונות
+let saveChunk: SaveChunkFn;
+let getChunk: GetChunkFn;
+let clearAllChunks: ClearAllChunksFn;
 
-// משתנה שיחזיק את ההבטחה (Promise) לחיבור למסד הנתונים (תבנית Singleton)
-// זה מונע פתיחת חיבורים מרובים במקביל
-let dbPromise: Promise<IDBDatabase> | null = null;
+// בחירת המימוש הנכון בזמן ריצה
+if (isBrowser) {
+  saveChunk = browserStorage.saveChunk;
+  getChunk = browserStorage.getChunk;
+  clearAllChunks = browserStorage.clearAllChunks;
 
-/**
- * פונקציה לקבלת אובייקט החיבור למסד הנתונים.
- * משתמשת בתבנית Singleton כדי להבטיח שרק חיבור אחד נפתח.
- */
-function getDB(): Promise<IDBDatabase> {
-  if (dbPromise) {
-    debugLog('Reusing existing DB connection promise.');
-    return dbPromise;
-  }
-  debugLog('Creating new DB connection promise.');
-  dbPromise = new Promise((resolve, reject) => {
-    // פתיחת בקשה לחיבור למסד הנתונים
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
+} else {
 
-    request.onerror = () => {
-      console.error('IndexedDB error:', request.error);
-      debugLog('IndexedDB error:', request.error);
-      reject(new Error('Failed to open IndexedDB.'));
-      dbPromise = null; // איפוס במקרה של שגיאה כדי לאפשר ניסיון חוזר
-    };
-
-    request.onsuccess = () => {
-      debugLog('IndexedDB connection successful.');
-      resolve(request.result);
-    };
-
-    // פונקציה זו רצה רק אם הגרסה של מסד הנתונים השתנתה או שהוא נוצר לראשונה
-    request.onupgradeneeded = (event) => {
-      debugLog('IndexedDB upgrade needed.');
-      const db = (event.target as IDBOpenDBRequest).result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        debugLog(`Creating object store: ${STORE_NAME}`);
-        db.createObjectStore(STORE_NAME); // יצירת "טבלה" לאחסון המקטעים
-      }
-    };
-  });
-  return dbPromise;
+  saveChunk = nodeStorage.saveChunk;
+  getChunk = nodeStorage.getChunk;
+  clearAllChunks = nodeStorage.clearAllChunks;
 }
 
-/**
- * שומר מקטע אודיו (כקובץ) ב-IndexedDB.
- * @param key המפתח (מספר המקטע)
- * @param chunk קובץ המקטע
- */
-export async function saveChunk(key: number, chunk: File): Promise<void> {
-  debugLog(`Attempting to save chunk to IndexedDB. Key: ${key}, Size: ${chunk.size}`);
-  const db = await getDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORE_NAME, 'readwrite');
-    const store = transaction.objectStore(STORE_NAME);
-    const request = store.put(chunk, key);
-
-    request.onsuccess = () => {
-        debugLog(`Successfully saved chunk with key: ${key}`);
-        resolve();
-    };
-    request.onerror = () => {
-        console.error('Failed to save chunk:', request.error);
-        debugLog('Failed to save chunk:', request.error);
-        reject(request.error);
-    };
-  });
-}
-
-/**
- * מאחזר מקטע אודיו מה-IndexedDB.
- * @param key המפתח (מספר המקטע)
- * @returns קובץ המקטע, או undefined אם לא נמצא.
- */
-export async function getChunk(key: number): Promise<File | undefined> {
-  debugLog(`Attempting to get chunk from IndexedDB. Key: ${key}`);
-  const db = await getDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORE_NAME, 'readonly');
-    const store = transaction.objectStore(STORE_NAME);
-    const request = store.get(key);
-
-    request.onsuccess = () => {
-        if (request.result) {
-            debugLog(`Successfully retrieved chunk with key: ${key}`, request.result);
-            resolve(request.result as File);
-        } else {
-            debugLog(`Chunk with key ${key} not found.`);
-            resolve(undefined);
-        }
-    };
-    request.onerror = () => {
-        console.error('Failed to get chunk:', request.error);
-        debugLog('Failed to get chunk:', request.error);
-        reject(request.error);
-    };
-  });
-}
-
-/**
- * מנקה את כל המקטעים מה-IndexedDB.
- */
-export async function clearAllChunks(): Promise<void> {
-  debugLog('Attempting to clear all chunks from IndexedDB.');
-  const db = await getDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORE_NAME, 'readwrite');
-    const store = transaction.objectStore(STORE_NAME);
-    const request = store.clear();
-
-    request.onsuccess = () => {
-        debugLog('Successfully cleared all chunks.');
-        resolve();
-    };
-    request.onerror = () => {
-        console.error('Failed to clear chunks:', request.error);
-        debugLog('Failed to clear chunks:', request.error);
-        reject(request.error);
-    };
-  });
-}
+// ייצוא הפונקציות שנבחרו
+export { saveChunk, getChunk, clearAllChunks };
