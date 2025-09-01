@@ -1,3 +1,4 @@
+#!/usr/bin/env bun
 // ===================================================================================
 // Transcribe CLI - כלי שורת פקודה לתמלול קבצי אודיו באמצעות שירות Gemini
 // ===================================================================================
@@ -48,7 +49,9 @@ export async function transcribe(
     filePath: string,
     promptPath?: string,
     onProgress?: (progress: { message: string }) => void,
-    concurrentRequests?: number
+    concurrentRequests?: number,
+    retries?: number,
+    initialBackoff?: number
 ): Promise<string> {
     console.log(`🔊 Processing audio file: ${filePath}`);
 
@@ -72,7 +75,16 @@ export async function transcribe(
 
     // 3. קריאה לשירות התמלול עם הצגת התקדמות
     console.log('\n🚀 Starting transcription process...');
-    const finalTranscript = await transcribeAudioFile(audioSource, prompt, onProgress, concurrentRequests);
+    const finalTranscript = await transcribeAudioFile(
+       audioSource,
+       prompt,
+       onProgress,
+       {
+           maxConcurrentRequests: concurrentRequests,
+           maxRetries: retries,
+           initialBackoffMs: initialBackoff
+       }
+   );
 
     if (onProgress) {
         process.stdout.write('\r\n'); // שורה חדשה אחרי סיום ההתקדמות
@@ -90,20 +102,28 @@ async function main(options: {
     prompt?: string;
     output?: string;
     concurrent?: number;
+    retries?: number;
+    backoff?: number;
 }) {
     console.log('--- Transcribe CLI Initialized ---');
 
-    const { file: filePath, prompt: promptPath, output: outputPath, concurrent } = options;
+    const { file: filePath, prompt: promptPath, output: outputPath, concurrent, retries, backoff } = options;
 
     if (concurrent) {
         console.log(`⚙️  Running with ${concurrent} concurrent requests.`);
+    }
+    if (retries) {
+      console.log(`🔁 Max retries set to ${retries}.`);
+    }
+    if (backoff) {
+      console.log(`⏱️ Initial backoff delay set to ${backoff}ms.`);
     }
 
     // קריאה לפונקציית התמלול הראשית
     const finalTranscript = await transcribe(filePath, promptPath, (progress) => {
         // הדפסת עדכוני התקדמות לקונסול
         process.stdout.write(`\r⏳ ${progress.message}`);
-    }, concurrent);
+    }, concurrent, retries, backoff);
 
     // שמירת התוצאה או הדפסתה
     if (outputPath) {
@@ -135,6 +155,8 @@ cli
     .option('--concurrent <number>', 'Number of concurrent requests to make', {
         default: undefined, // ברירת מחדל תהיה undefined אם לא סופק
     })
+    .option('--retries <number>', 'Maximum number of retries for failed operations')
+    .option('--backoff <number>', 'Initial backoff delay in milliseconds for retries')
     .action(async (options) => {
         if (!options.file) {
             console.error('Error: --file argument is required.');
