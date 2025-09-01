@@ -3,15 +3,16 @@
 // ===================================================================================
 //
 // שימוש:
-// bun run transcribe -- --file <path> [--prompt <path>] [--output <path>]
+// bun run transcribe -- --file <path> [--prompt <path>] [--output <path>] [--concurrent <number>]
 //
 // דוגמאות:
 // bun run transcribe -- --file ./audio/my-podcast.mp3
 // bun run transcribe -- --file ./audio/meeting.wav --prompt ./prompts/meeting-prompt.txt
 // bun run transcribe -- --file input.mp3 --output result.md
+// bun run transcribe -- --file long.mp3 --concurrent 5
 //
 // ===================================================================================
-
+import 'dotenv/config'; // טעינת משתני סביבה מקובץ .env
 import './utils/polyfill'; // ייבוא הפוליפילים ראשון כדי להבטיח שהסביבה מוכנה
 import { transcribeAudioFile } from './services/gemini';
 import { AudioSource } from './utils/audioProcessor';
@@ -26,11 +27,12 @@ import { fileTypeFromBuffer } from 'file-type';
  * מנתח את הארגומנטים שהועברו משורת הפקודה.
  * @returns אובייקט עם נתיבי הקבצים הנדרשים.
  */
-function parseArguments(): { filePath: string; promptPath?: string; outputPath?: string } {
+function parseArguments(): { filePath: string; promptPath?: string; outputPath?: string; concurrent?: number } {
     const args = process.argv.slice(2);
     const fileIndex = args.indexOf('--file');
     const promptIndex = args.indexOf('--prompt');
     const outputIndex = args.indexOf('--output');
+    const concurrentIndex = args.indexOf('--concurrent');
 
     if (fileIndex === -1 || !args[fileIndex + 1]) {
         throw new Error('Missing required argument: --file <path_to_audio_file>');
@@ -39,8 +41,18 @@ function parseArguments(): { filePath: string; promptPath?: string; outputPath?:
     const filePath = args[fileIndex + 1];
     const promptPath = promptIndex !== -1 ? args[promptIndex + 1] : undefined;
     const outputPath = outputIndex !== -1 ? args[outputIndex + 1] : undefined;
+    let concurrent: number | undefined = undefined;
+    if (concurrentIndex !== -1 && args[concurrentIndex + 1]) {
+        const num = parseInt(args[concurrentIndex + 1], 10);
+        if (!isNaN(num) && num > 0) {
+            concurrent = num;
+        } else {
+            console.warn('Warning: Invalid value for --concurrent. Using default.');
+        }
+    }
 
-    return { filePath, promptPath, outputPath };
+
+    return { filePath, promptPath, outputPath, concurrent };
 }
 
 /**
@@ -59,12 +71,19 @@ async function loadPrompt(promptPath?: string): Promise<string> {
 }
 
 /**
- * פונקציה ראשית המריצה את תהליך התמלול מה-CLI.
+ * מתמלל קובץ שמע מנתיב נתון.
+ * זוהי פונקציית הליבה שניתן לייבא ולהשתמש בה במקומות אחרים.
+ * @param filePath נתיב לקובץ השמע.
+ * @param promptPath נתיב אופציונלי לקובץ פרומפט.
+ * @param onProgress קולבק אופציונלי לדיווח על התקדמות.
+ * @returns התמלול הסופי כמחרוזת.
  */
-async function main() {
-    console.log('--- Transcribe CLI Initialized ---');
-
-    const { filePath, promptPath, outputPath } = parseArguments();
+export async function transcribe(
+    filePath: string,
+    promptPath?: string,
+    onProgress?: (progress: { message: string }) => void,
+    concurrentRequests?: number
+): Promise<string> {
     console.log(`🔊 Processing audio file: ${filePath}`);
 
     // 1. טעינת הקובץ והמרתו ל-AudioSource
@@ -87,14 +106,35 @@ async function main() {
 
     // 3. קריאה לשירות התמלול עם הצגת התקדמות
     console.log('\n🚀 Starting transcription process...');
-    const finalTranscript = await transcribeAudioFile(audioSource, prompt, (progress) => {
+    const finalTranscript = await transcribeAudioFile(audioSource, prompt, onProgress, concurrentRequests);
+
+    if (onProgress) {
+        process.stdout.write('\r\n'); // שורה חדשה אחרי סיום ההתקדמות
+    }
+
+    return finalTranscript;
+}
+
+
+/**
+ * פונקציה ראשית המריצה את תהליך התמלול מה-CLI.
+ */
+async function main() {
+    console.log('--- Transcribe CLI Initialized ---');
+
+    const { filePath, promptPath, outputPath, concurrent } = parseArguments();
+
+    if (concurrent) {
+        console.log(`⚙️  Running with ${concurrent} concurrent requests.`);
+    }
+
+    // קריאה לפונקציית התמלול הראשית
+    const finalTranscript = await transcribe(filePath, promptPath, (progress) => {
         // הדפסת עדכוני התקדמות לקונסול
         process.stdout.write(`\r⏳ ${progress.message}`);
-    });
+    }, concurrent);
 
-    process.stdout.write('\r\n'); // שורה חדשה אחרי סיום ההתקדמות
-
-    // 4. שמירת התוצאה או הדפסתה
+    // שמירת התוצאה או הדפסתה
     if (outputPath) {
         const basename = path.basename(filePath);
         const outputContent = [

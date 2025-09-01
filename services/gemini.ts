@@ -79,14 +79,91 @@ function stitch(text1: string, text2: string): string {
  * @param onProgress פונקציית callback לדיווח על התקדמות לממשק המשתמש.
  * @returns מחרוזת המכילה את התמלול הסופי והמלא.
  */
-export async function transcribeAudioFile(
+/**
+ * מתמלל מקטע אודיו בודד.
+ * פונקציה זו מטפלת בהעלאה, תמלול ומחיקה של מקטע אחד.
+ * @param chunkIndex האינדקס של המקטע.
+ * @param totalChunks המספר הכולל של המקטעים.
+ * @param audioSource מקור האודיו הראשי (לצורך שמות קבצים).
+ * @param prompt הפרומפט למודל.
+ * @param onProgress פונקציית דיווח התקדמות.
+ * @returns התמלול של המקטע.
+ */
+async function transcribeChunk(
+    chunkIndex: number,
+    totalChunks: number,
     audioSource: AudioSource,
     prompt: string,
     onProgress: (update: TranscriptionProgress) => void
 ): Promise<string> {
-    debugLog('--- Starting new transcription process ---', { file: audioSource.fileName });
+    debugLog(`--- Processing chunk ${chunkIndex + 1}/${totalChunks} ---`);
+    const chunkFile = await getChunk(chunkIndex);
+    if (!chunkFile) {
+        throw new Error(`שגיאה: לא ניתן היה לאחזר את מקטע מספר ${chunkIndex} מהאחסון.`);
+    }
+    debugLog(`Retrieved chunk ${chunkIndex} from IndexedDB`, { name: chunkFile.name, size: chunkFile.size });
+
+    let uploadedFile: any;
     try {
-        // שלב 1: חיתוך קובץ האודיו למקטעים ואחסונם ב-IndexedDB
+        // כאן לא נדווח על העלאה, נדווח על התקדמות כוללת בפונקציה הראשית
+        const resourceName = generateUniqueResourceName(chunkIndex);
+        const displayName = `chunk_${chunkIndex}_${audioSource.fileName}`;
+
+        debugLog(`Uploading chunk ${chunkIndex} to Google AI`, { resourceName, displayName });
+        uploadedFile = await ai.files.upload({
+            config: { name: resourceName, displayName: displayName, mimeType: chunkFile.type },
+            file: chunkFile,
+        });
+
+        if (!uploadedFile) {
+            throw new Error("העלאת הקובץ ל-API נכשלה, לא התקבל אובייקט קובץ.");
+        }
+        debugLog('Upload successful:', uploadedFile);
+
+        const audioPart = { fileData: { mimeType: uploadedFile.mimeType, fileUri: uploadedFile.uri } };
+        const textPart = { text: prompt };
+
+        debugLog('Calling generateContentStream with URI:', audioPart.fileData.fileUri);
+        const stream = await ai.models.generateContentStream({
+            model: 'gemini-2.5-flash',
+            contents: { parts: [audioPart, textPart] },
+        });
+
+        let currentChunkTranscript = '';
+        for await (const chunk of stream) {
+            currentChunkTranscript += chunk.text;
+            // אין צורך לעדכן onProgress עם הסטרימינג כאן כדי למנוע הצפה של עדכונים.
+            // נעדכן רק בסיום כל מקטע.
+        }
+        debugLog(`Finished streaming for chunk ${chunkIndex + 1}. Full text length: ${currentChunkTranscript.length}`);
+        return currentChunkTranscript;
+
+    } finally {
+        if (uploadedFile?.name) {
+            debugLog('Attempting to delete remote file:', uploadedFile.name);
+            ai.files.delete({ name: uploadedFile.name })
+                .then(() => debugLog(`Successfully deleted remote file: ${uploadedFile?.name}`))
+                .catch(e => {
+                    console.error("Failed to delete remote file:", e);
+                    debugLog("Failed to delete remote file:", e);
+                });
+        }
+    }
+}
+
+
+export async function transcribeAudioFile(
+    audioSource: AudioSource,
+    prompt: string,
+    onProgress: (update: TranscriptionProgress) => void,
+    maxConcurrentRequests: number = 3 // פרמטר חדש עם ערך ברירת מחדל
+): Promise<string> {
+    debugLog('--- Starting new transcription process ---', {
+        file: audioSource.fileName,
+        concurrent: maxConcurrentRequests
+    });
+    try {
+        // שלב 1: חיתוך קובץ האודיו
         onProgress({
             state: ProcessingState.PREPARING,
             message: 'מכין ומקטע את האודיו...',
@@ -96,97 +173,51 @@ export async function transcribeAudioFile(
         });
         debugLog(`Audio chunking complete. Total chunks: ${totalChunks}`);
 
-        const transcripts: string[] = [];
+        // שלב 2: עיבוד מקבילי של המקטעים
+        const transcripts = new Array<string | Error>(totalChunks);
+        let completedChunks = 0;
 
-        // שלב 2: עיבוד כל מקטע בנפרד
-        for (let i = 0; i < totalChunks; i++) {
-            debugLog(`--- Processing chunk ${i + 1}/${totalChunks} ---`);
-            const chunkFile = await getChunk(i);
-            if (!chunkFile) {
-                throw new Error(`שגיאה: לא ניתן היה לאחזר את מקטע מספר ${i} מהאחסון.`);
-            }
-            debugLog(`Retrieved chunk ${i} from IndexedDB`, { name: chunkFile.name, size: chunkFile.size });
+        const chunkIndices = Array.from({ length: totalChunks }, (_, i) => i);
 
-            let uploadedFile: any;
-            try {
-                onProgress({
-                    state: ProcessingState.UPLOADING,
-                    message: `מעלה מקטע ${i + 1}/${totalChunks}...`,
-                    currentChunk: i + 1,
-                    totalChunks: totalChunks,
-                });
+        const worker = async () => {
+            while (chunkIndices.length > 0) {
+                const chunkIndex = chunkIndices.shift();
+                if (chunkIndex === undefined) continue;
 
-                const resourceName = generateUniqueResourceName(i);
-                const displayName = `chunk_${i}_${audioSource.fileName}`;
-
-                debugLog(`Uploading chunk ${i} to Google AI`, { resourceName, displayName });
-                // העלאת מקטע האודיו לשרתים של גוגל באמצעות ה-File API
-                uploadedFile = await ai.files.upload({
-                    config: { name: resourceName, displayName: displayName, mimeType: chunkFile.type },
-                    file: chunkFile,
-                    
-                });
-                
-                if (!uploadedFile) {
-                    throw new Error("העלאת הקובץ ל-API נכשלה, לא התקבל אובייקט קובץ.");
-                }
-                debugLog('Upload successful:', uploadedFile);
-
-
-                const transcribingMessage = `מתמלל מקטע ${i + 1}/${totalChunks}...`;
-                onProgress({
-                    state: ProcessingState.TRANSCRIBING,
-                    message: transcribingMessage,
-                    currentChunk: i + 1,
-                    totalChunks: totalChunks,
-                });
-
-                // הכנת חלקי הבקשה ל-Gemini
-                const audioPart = { fileData: { mimeType: uploadedFile.mimeType, fileUri: uploadedFile.uri } };
-                const textPart = { text: prompt };
-
-                debugLog('Calling generateContentStream with URI:', audioPart.fileData.fileUri);
-                // שליחת בקשת תמלול בסטרימינג
-                const stream = await ai.models.generateContentStream({
-                    model: 'gemini-2.5-flash',
-                    contents: { parts: [audioPart, textPart] },
-                });
-
-                // קריאת התוצאות מהסטרים
-                let currentChunkTranscript = '';
-                for await (const chunk of stream) {
-                    const text = chunk.text;
-                    // debugLog(`Stream received for chunk ${i}:`, `"${text}"`);
-                    currentChunkTranscript += text;
-                    // שליחת עדכון התקדמות עם הטקסט המוזרם לממשק המשתמש
+                try {
+                    const result = await transcribeChunk(chunkIndex, totalChunks, audioSource, prompt, onProgress);
+                    transcripts[chunkIndex] = result;
+                } catch (e) {
+                    debugLog(`Error processing chunk ${chunkIndex}:`, e);
+                    transcripts[chunkIndex] = e instanceof Error ? e : new Error(String(e));
+                } finally {
+                    completedChunks++;
                     onProgress({
                         state: ProcessingState.TRANSCRIBING,
-                        message: transcribingMessage,
-                        currentChunk: i + 1,
+                        message: `מתמלל... הושלמו ${completedChunks}/${totalChunks} מקטעים.`,
+                        currentChunk: completedChunks,
                         totalChunks: totalChunks,
-                        streamedChunkText: currentChunkTranscript,
                     });
                 }
-                debugLog(`Finished streaming for chunk ${i + 1}. Full text length: ${currentChunkTranscript.length}`);
-                
-                transcripts.push(currentChunkTranscript);
-
-            } finally {
-                // שלב 3: ניקוי הקובץ שהועלה מהשרתים של גוגל באופן מיידי
-                if (uploadedFile?.name) {
-                    debugLog('Attempting to delete remote file:', uploadedFile.name);
-                    // זוהי פעולת "שגר ושכח", אין צורך לחכות לסיומה כדי לא לעכב את התהליך
-                    ai.files.delete({name: uploadedFile.name})
-                      .then(() => debugLog(`Successfully deleted remote file: ${uploadedFile?.name}`))
-                      .catch(e => {
-                          console.error("Failed to delete remote file:", e)
-                          debugLog("Failed to delete remote file:", e)
-                      });
-                }
             }
+        };
+
+        const workers = Array(maxConcurrentRequests).fill(null).map(worker);
+        await Promise.all(workers);
+
+        // שלב 3: בדיקת שגיאות ואיחוי התוצאות
+        const failedChunks = transcripts.reduce((acc, result, index) => {
+            if (result instanceof Error) {
+                acc.push({ index, error: result.message });
+            }
+            return acc;
+        }, [] as { index: number; error: string }[]);
+
+        if (failedChunks.length > 0) {
+            const errorMessages = failedChunks.map(f => `מקטע ${f.index + 1}: ${f.error}`).join('\n');
+            throw new Error(`נכשלו ${failedChunks.length} מקטעים:\n${errorMessages}`);
         }
 
-        // שלב 4: איחוי כל חלקי התמלול לטקסט אחד רציף
         onProgress({
             state: ProcessingState.TRANSCRIBING,
             message: 'מאחה את כל חלקי התמלול...',
@@ -194,15 +225,16 @@ export async function transcribeAudioFile(
             totalChunks: totalChunks,
         });
         debugLog('Stitching all transcripts together.');
-        
-        if (transcripts.length === 0) {
+
+        const successfulTranscripts = transcripts.filter(t => typeof t === 'string') as string[];
+        if (successfulTranscripts.length === 0) {
             debugLog('No transcripts to stitch, returning empty string.');
             return '';
         }
-        
-        let fullTranscript = transcripts[0];
-        for (let i = 1; i < transcripts.length; i++) {
-            fullTranscript = stitch(fullTranscript, transcripts[i]);
+
+        let fullTranscript = successfulTranscripts[0];
+        for (let i = 1; i < successfulTranscripts.length; i++) {
+            fullTranscript = stitch(fullTranscript, successfulTranscripts[i]);
         }
         debugLog('Stitching complete. Final transcript length:', fullTranscript.length);
 

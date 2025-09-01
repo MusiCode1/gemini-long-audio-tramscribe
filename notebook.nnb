@@ -1,0 +1,42 @@
+{
+    "cells": [
+        {
+            "language": "typescript",
+            "source": [
+                "const { transcribe } = require('./transcribe-cli');\r\n\r\nlet var1: string = \"Hello, World!\";\r\nlet var2: number = 42;\r\nlog(`Variable 1: ${var1}`);\r\nlog(`Variable 2: ${var2}`);"
+            ],
+            "outputs": []
+        },
+        {
+            "language": "typescript",
+            "source": [
+                "const lib = await (new Function('id', 'return import(id)'))('./lib.mjs');"
+            ],
+            "outputs": [
+                {
+                    "items": [
+                        {
+                            "mime": "application/vnd.code.notebook.stdout",
+                            "value": [
+                                "",
+                                ""
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "items": [
+                        {
+                            "mime": "application/vnd.code.notebook.error",
+                            "value": {
+                                "name": "TypeError",
+                                "message": "A dynamic import callback was not specified.",
+                                "stack": "    at importModuleDynamicallyCallback (node:internal/modules/esm/utils:266:9)\n    at eval (eval at <anonymous> (<Cell 2> [1, 0]), <anonymous>:3:1)\n    at <Cell 2> [1, 0]\n    at <Cell 2> [4, 46]\n    at Script.runInContext (node:vm:149:12)\n    at Script.runInNewContext (node:vm:154:17)\n    at Object.runInNewContext (node:vm:310:38)\n    at C (d:\\Users\\User\\.vscode\\extensions\\donjayamanne.typescript-notebook-2.0.6\\out\\extension\\server\\index.js:2:113345)\n    at t.execCode (d:\\Users\\User\\.vscode\\extensions\\donjayamanne.typescript-notebook-2.0.6\\out\\extension\\server\\index.js:2:114312)\n    at k.<anonymous> (d:\\Users\\User\\.vscode\\extensions\\donjayamanne.typescript-notebook-2.0.6\\out\\extension\\server\\index.js:2:142156)"
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

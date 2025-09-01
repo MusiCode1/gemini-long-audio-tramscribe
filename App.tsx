@@ -33,6 +33,8 @@ const App: React.FC = () => {
   const [liveTranscript, setLiveTranscript] = useState<string>('');
   // מצב עריכת הפרומפט
   const [isEditingPrompt, setIsEditingPrompt] = useState<boolean>(false);
+  // מצב חדש לשליטה על מספר הבקשות המקבילות
+  const [maxConcurrentRequests, setMaxConcurrentRequests] = useState<number>(3);
 
   // פונקציה להוספת הודעה ליומן הפעילות בממשק המשתמש
   const addLog = useCallback((message: string) => {
@@ -145,28 +147,11 @@ const App: React.FC = () => {
     const progressCallback = (update: TranscriptionProgress) => {
       setProgress(prevProgress => {
         // הוספת הודעות חדשות ליומן רק פעם אחת
-        if (prevProgress.message !== update.message && !update.streamedChunkText) {
+        if (prevProgress.message !== update.message) {
           addLog(update.message);
         }
-        
-        // זיהוי מעבר למקטע חדש כדי לאפס את תצוגת הטקסט החי
-        const isNewChunk = prevProgress.currentChunk !== update.currentChunk;
-        
-        if (isNewChunk) {
-            debugLog(`New chunk detected. Old: ${prevProgress.currentChunk}, New: ${update.currentChunk}. Resetting live transcript.`);
-            setLiveTranscript(update.streamedChunkText || '');
-        } else if (update.streamedChunkText) {
-            // לוגיקה זו מטפלת בעדכוני סטרימינג על ידי הצגת הטקסט המצטבר
-            setLiveTranscript(currentLive => {
-                if (update.streamedChunkText && update.streamedChunkText.startsWith(currentLive)) {
-                    return update.streamedChunkText;
-                }
-                // גיבוי למקרה שהסטרים לא מגיע בסדר הצפוי
-                return currentLive + (update.streamedChunkText || '');
-            });
-        }
-        
-        return update; // עדכון מצב ההתקדמות הכללי
+        // בעיבוד מקבילי, אין לנו תצוגת סטרימינג פשוטה, לכן נסיר את הלוגיקה הזו
+        return update;
       });
     };
 
@@ -185,7 +170,8 @@ const App: React.FC = () => {
       const finalTranscript = await transcribeAudioFile(
         audioSource,
         transcriptionPrompt,
-        progressCallback
+        progressCallback,
+        maxConcurrentRequests // העברת הפרמטר החדש
       );
       debugLog('transcribeAudioFile service finished successfully.');
 
@@ -241,6 +227,21 @@ const App: React.FC = () => {
             ) : (
                 <>
                     <FileUpload onFileUpload={handleFileUpload} />
+                    {/* הוספת ממשק לשליטה על רמת המקביליות */}
+                    <div className="mt-6 w-full max-w-sm mx-auto">
+                        <label htmlFor="concurrency-slider" className="block text-sm font-medium text-gray-300 mb-2">
+                            רמת מקביליות: {maxConcurrentRequests} בקשות
+                        </label>
+                        <input
+                            id="concurrency-slider"
+                            type="range"
+                            min="1"
+                            max="10"
+                            value={maxConcurrentRequests}
+                            onChange={(e) => setMaxConcurrentRequests(Number(e.target.value))}
+                            className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                        />
+                    </div>
                     <div className="mt-6 text-center">
                         <button
                             onClick={() => setIsEditingPrompt(true)}
