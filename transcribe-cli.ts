@@ -19,41 +19,7 @@ import { AudioSource } from './utils/audioProcessor';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { fileTypeFromBuffer } from 'file-type';
-
-/**
- * פונקציה ראשית המריצה את תהליך התמלול מה-CLI.
- */
-/**
- * מנתח את הארגומנטים שהועברו משורת הפקודה.
- * @returns אובייקט עם נתיבי הקבצים הנדרשים.
- */
-function parseArguments(): { filePath: string; promptPath?: string; outputPath?: string; concurrent?: number } {
-    const args = process.argv.slice(2);
-    const fileIndex = args.indexOf('--file');
-    const promptIndex = args.indexOf('--prompt');
-    const outputIndex = args.indexOf('--output');
-    const concurrentIndex = args.indexOf('--concurrent');
-
-    if (fileIndex === -1 || !args[fileIndex + 1]) {
-        throw new Error('Missing required argument: --file <path_to_audio_file>');
-    }
-
-    const filePath = args[fileIndex + 1];
-    const promptPath = promptIndex !== -1 ? args[promptIndex + 1] : undefined;
-    const outputPath = outputIndex !== -1 ? args[outputIndex + 1] : undefined;
-    let concurrent: number | undefined = undefined;
-    if (concurrentIndex !== -1 && args[concurrentIndex + 1]) {
-        const num = parseInt(args[concurrentIndex + 1], 10);
-        if (!isNaN(num) && num > 0) {
-            concurrent = num;
-        } else {
-            console.warn('Warning: Invalid value for --concurrent. Using default.');
-        }
-    }
-
-
-    return { filePath, promptPath, outputPath, concurrent };
-}
+import cac from 'cac';
 
 /**
  * טוען קובץ פרומפט מהנתיב הנתון, או מחזיר פרומפט ברירת מחדל.
@@ -119,10 +85,15 @@ export async function transcribe(
 /**
  * פונקציה ראשית המריצה את תהליך התמלול מה-CLI.
  */
-async function main() {
+async function main(options: {
+    file: string;
+    prompt?: string;
+    output?: string;
+    concurrent?: number;
+}) {
     console.log('--- Transcribe CLI Initialized ---');
 
-    const { filePath, promptPath, outputPath, concurrent } = parseArguments();
+    const { file: filePath, prompt: promptPath, output: outputPath, concurrent } = options;
 
     if (concurrent) {
         console.log(`⚙️  Running with ${concurrent} concurrent requests.`);
@@ -153,9 +124,40 @@ async function main() {
     }
 }
 
-// הרצת הפונקציה הראשית וטיפול בשגיאות
-main().catch(error => {
-    console.error("\n❌ An unexpected error occurred:");
-    console.error(error.message);
+// הגדרת ה-CLI באמצעות cac
+const cli = cac('transcribe');
+
+cli
+    .command('', 'Transcribe an audio file')
+    .option('--file <path>', 'Path to the audio file to transcribe')
+    .option('--prompt <path>', 'Path to a custom prompt file')
+    .option('--output <path>', 'Path to save the output markdown file')
+    .option('--concurrent <number>', 'Number of concurrent requests to make', {
+        default: undefined, // ברירת מחדל תהיה undefined אם לא סופק
+    })
+    .action(async (options) => {
+        if (!options.file) {
+            console.error('Error: --file argument is required.');
+            cli.outputHelp();
+            process.exit(1);
+        }
+
+        try {
+            await main(options);
+        } catch (error) {
+            console.error("\n❌ An unexpected error occurred:");
+            console.error(error.message);
+            process.exit(1);
+        }
+    });
+
+cli.help();
+cli.version('1.0.0');
+
+// ניתוח הארגומנטים שהועברו
+try {
+    cli.parse();
+} catch (error) {
+    console.error(`\n❌ ${error.message}`);
     process.exit(1);
-});
+}
