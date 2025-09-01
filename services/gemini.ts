@@ -4,6 +4,50 @@ import { chunkAndStoreAudio, AudioSource } from '../utils/audioProcessor';
 import { getChunk, clearAllChunks } from '../utils/storage';
 import { debugLog } from '../utils/logger';
 
+// קבועים עבור מנגנון ניסיונות חוזרים
+const MAX_RETRIES = 5; // מספר ניסיונות מקסימלי
+const INITIAL_BACKOFF_MS = 2000; // זמן המתנה התחלתי במילישניות
+
+/**
+* פונקציית עזר המבצעת פעולה אסינכרונית עם מנגנון ניסיונות חוזרים והמתנה (Exponential Backoff).
+* @param fn הפעולה האסינכרונית לביצוע.
+* @param operationName שם הפעולה (לצורכי לוגינג).
+* @param chunkIndex אינדקס המקטע המעובד.
+* @param onProgress פונקציית callback לדיווח התקדמות.
+* @returns את תוצאת הפעולה המוצלחת.
+* @throws שגיאה אם כל הניסיונות נכשלים.
+*/
+async function withRetry<T>(
+ fn: () => Promise<T>,
+ operationName: string,
+ chunkIndex: number,
+ onProgress: (update: TranscriptionProgress) => void
+): Promise<T> {
+ let lastError: Error | undefined;
+ for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+   try {
+     return await fn();
+   } catch (error) {
+     lastError = error instanceof Error ? error : new Error(String(error));
+     // חישוב זמן המתנה עם הכפלה מעריכית, בתוספת רכיב אקראי קטן למניעת התנגשויות
+     const delay = INITIAL_BACKOFF_MS * Math.pow(2, attempt - 1) + Math.random() * 1000;
+     
+     debugLog(`[Chunk ${chunkIndex + 1}] Attempt ${attempt}/${MAX_RETRIES} failed for ${operationName}. Retrying in ${delay.toFixed(0)}ms...`, lastError);
+     
+     // עדכון המשתמש רק אם לא מדובר בניסיון האחרון
+     if (attempt < MAX_RETRIES) {
+       onProgress({
+         state: ProcessingState.TRANSCRIBING,
+         message: `ניסיון ${attempt}/${MAX_RETRIES} נכשל עבור מקטע ${chunkIndex + 1} (${operationName}). מנסה שוב...`
+       });
+       await new Promise(resolve => setTimeout(resolve, delay));
+     }
+   }
+ }
+ // אם כל הניסיונות נכשלו, זרוק שגיאה מפורטת
+ throw new Error(`[Chunk ${chunkIndex + 1}] Operation "${operationName}" failed after ${MAX_RETRIES} attempts: ${lastError?.message}`);
+}
+
 // בדיקה אם מפתח ה-API הוגדר
 if (!process.env.API_KEY) {
   throw new Error("API_KEY environment variable not set.");
@@ -110,10 +154,16 @@ async function transcribeChunk(
         const displayName = `chunk_${chunkIndex}_${audioSource.fileName}`;
 
         debugLog(`Uploading chunk ${chunkIndex} to Google AI`, { resourceName, displayName });
-        uploadedFile = await ai.files.upload({
-            config: { name: resourceName, displayName: displayName, mimeType: chunkFile.type },
-            file: chunkFile,
-        });
+       
+       uploadedFile = await withRetry(
+           () => ai.files.upload({
+               config: { name: resourceName, displayName: displayName, mimeType: chunkFile.type },
+               file: chunkFile,
+           }),
+           'File Upload',
+           chunkIndex,
+           onProgress
+       );
 
         if (!uploadedFile) {
             throw new Error("העלאת הקובץ ל-API נכשלה, לא התקבל אובייקט קובץ.");
@@ -124,10 +174,16 @@ async function transcribeChunk(
         const textPart = { text: prompt };
 
         debugLog('Calling generateContentStream with URI:', audioPart.fileData.fileUri);
-        const stream = await ai.models.generateContentStream({
-            model: 'gemini-2.5-flash',
-            contents: { parts: [audioPart, textPart] },
-        });
+       
+       const stream = await withRetry(
+           () => ai.models.generateContentStream({
+               model: 'gemini-2.5-flash',
+               contents: { parts: [audioPart, textPart] },
+           }),
+           'Transcription',
+           chunkIndex,
+           onProgress
+       );
 
         let currentChunkTranscript = '';
         for await (const chunk of stream) {
