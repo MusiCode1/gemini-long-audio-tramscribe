@@ -3,7 +3,8 @@ import { debugLog } from './logger';
 // קבועים עבור הגדרות מסד הנתונים בדפדפן
 const DB_NAME = 'AudioChunksDB';
 const STORE_NAME = 'audioChunks';
-const DB_VERSION = 1;
+const RESULTS_STORE_NAME = 'transcriptionResults';
+const DB_VERSION = 2; // Bump version to trigger onupgradeneeded
 
 // משתנה שיחזיק את ההבטחה (Promise) לחיבור למסד הנתונים (תבנית Singleton)
 // זה מונע פתיחת חיבורים מרובים במקביל
@@ -42,6 +43,12 @@ function getDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         debugLog(`Creating object store: ${STORE_NAME}`);
         db.createObjectStore(STORE_NAME); // יצירת "טבלה" לאחסון המקטעים
+        debugLog(`Object store ${STORE_NAME} created.`);
+      }
+      if (!db.objectStoreNames.contains(RESULTS_STORE_NAME)) {
+        debugLog(`Creating object store: ${RESULTS_STORE_NAME}`);
+        db.createObjectStore(RESULTS_STORE_NAME); // יצירת "טבלה" לאחסון התוצאות
+        debugLog(`Object store ${RESULTS_STORE_NAME} created.`);
       }
     };
   });
@@ -103,6 +110,60 @@ export async function getChunk(key: number): Promise<File | undefined> {
     request.onerror = () => {
         console.error('Failed to get chunk:', request.error);
         debugLog('Failed to get chunk:', request.error);
+        reject(request.error);
+    };
+  });
+}
+
+/**
+ * שומר את תוצאת התמלול (טקסט) ואת קובץ האודיו התואם ב-IndexedDB.
+ * @param key המפתח (מספר המקטע)
+ * @param audioFile קובץ האודיו של המקטע
+ * @param transcript התמלול של המקטע
+ */
+export async function saveChunkResult(key: number, audioFile: File, transcript: string): Promise<void> {
+  debugLog(`Attempting to save chunk result to IndexedDB. Key: ${key}`);
+  const db = await getDB();
+  const resultRecord = {
+    audioBlob: audioFile, // Storing the File object directly, which works as it's blob-like
+    transcript: transcript,
+    name: audioFile.name
+  };
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(RESULTS_STORE_NAME, 'readwrite');
+    const store = transaction.objectStore(RESULTS_STORE_NAME);
+    const request = store.put(resultRecord, key);
+
+    request.onsuccess = () => {
+        debugLog(`Successfully saved chunk result with key: ${key}`);
+        resolve();
+    };
+    request.onerror = () => {
+        console.error('Failed to save chunk result:', request.error);
+        debugLog('Failed to save chunk result:', request.error);
+        reject(request.error);
+    };
+  });
+}
+
+/**
+ * מנקה את כל התוצאות מה-IndexedDB.
+ */
+export async function clearAllResults(): Promise<void> {
+  debugLog('Attempting to clear all results from IndexedDB.');
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(RESULTS_STORE_NAME, 'readwrite');
+    const store = transaction.objectStore(RESULTS_STORE_NAME);
+    const request = store.clear();
+
+    request.onsuccess = () => {
+        debugLog('Successfully cleared all results.');
+        resolve();
+    };
+    request.onerror = () => {
+        console.error('Failed to clear results:', request.error);
+        debugLog('Failed to clear results:', request.error);
         reject(request.error);
     };
   });

@@ -66,3 +66,22 @@ export async function clearAllChunks(): Promise<void> {
         tempDir = null;
     }
 }
+
+/**
+ * שומר את תוצאת התמלול (טקסט) לצד קובץ האודיו התואם באותה ספרייה זמנית.
+ * @param key המפתח (מספר המקטע)
+ * @param audioFile קובץ האודיו של המקטע (משמש לקביעת שם קובץ הטקסט)
+ * @param transcript התמלול של המקטע
+ */
+export async function saveChunkResult(key: number, audioFile: File, transcript: string): Promise<void> {
+    const dir = await getTempDir();
+    
+    // בניית שם קובץ הטקסט על בסיס שם קובץ האודיו
+    const audioExtension = path.extname(audioFile.name) || '.wav';
+    const baseName = `${key}-${path.basename(audioFile.name, audioExtension)}`;
+    const textFilePath = path.join(dir, `${baseName}.txt`);
+
+    // שמירת קובץ הטקסט
+    await fs.writeFile(textFilePath, transcript, 'utf-8');
+    debugLog(`Saved result transcript for chunk ${key} to: ${textFilePath}`);
+}

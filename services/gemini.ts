@@ -1,7 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 import { ProcessingState, TranscriptionProgress } from '../types';
 import { chunkAndStoreAudio, AudioSource } from '../utils/audioProcessor';
-import { getChunk, clearAllChunks } from '../utils/storage';
+import { getChunk, clearAllChunks, saveChunkResult, clearAllResults } from '../utils/storage';
 import { debugLog } from '../utils/logger';
 
 /**
@@ -160,6 +160,16 @@ async function transcribeChunk(
             currentChunkTranscript += chunk.text;
         }
         debugLog(`Finished streaming for chunk ${chunkIndex + 1}. Full text length: ${currentChunkTranscript.length}`);
+        
+        // שמירת התוצאה בקובץ זמני
+        try {
+            await saveChunkResult(chunkIndex, chunkFile, currentChunkTranscript);
+            debugLog(`Successfully saved chunk ${chunkIndex + 1} result to temporary storage.`);
+        } catch (saveError) {
+            console.error(`Warning: Failed to save temporary result for chunk ${chunkIndex + 1}:`, saveError);
+            debugLog(`Warning: Failed to save temporary result for chunk ${chunkIndex + 1}:`, saveError);
+        }
+
         return currentChunkTranscript;
 
     } finally {
@@ -287,5 +297,6 @@ export async function transcribeAudioFile(
     } finally {
         debugLog('Performing final cleanup of local chunks from IndexedDB.');
         await clearAllChunks();
+        await clearAllResults();
     }
 }
