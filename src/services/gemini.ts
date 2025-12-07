@@ -158,6 +158,8 @@ async function transcribeChunk(
         let currentChunkTranscript = '';
         for await (const chunk of stream) {
             currentChunkTranscript += chunk.text;
+
+            debugLog(`[Chunk ${chunkIndex + 1}] Received chunk:`, chunk.text.substring(0, 100) + '...');
         }
         debugLog(`Finished streaming for chunk ${chunkIndex + 1}. Full text length: ${currentChunkTranscript.length}`);
         
@@ -295,8 +297,8 @@ export async function transcribeAudioFile(
         const errorMessage = e instanceof Error ? e.message : "שגיאה לא ידועה בתקשורת עם Gemini.";
         throw new Error(errorMessage);
     } finally {
-        debugLog('Performing final cleanup of local chunks from IndexedDB.');
+        /* debugLog('Performing final cleanup of local chunks from IndexedDB.');
         await clearAllChunks();
-        await clearAllResults();
+        await clearAllResults(); */
     }
 }

@@ -1,0 +1,15 @@
+
+
+POST http://localhost:3000/transcribe
+
+{
+    "concurrent": 1,
+    "backoff": 30000,
+    "prompt": "E:\\וועדים-מעשיים\\Shiur\\Prompts\\Transcribe-Prompt.md",
+    "file": "E:\\וועדים-מעשיים\\Shiur\\שיעור-15\\Lesson-15-full-v1.m4a",
+    "output": "E:\\וועדים-מעשיים\\Shiur\\שיעור-15\\L15-t.md"
+}
+
+###
+
+GET http://localhost:3000/

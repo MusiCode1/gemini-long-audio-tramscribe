@@ -1,6 +1,6 @@
-import { isBrowser } from './env';
-import * as browserStorage from './storage.browser';
-import * as nodeStorage from './storage.node';
+import { isBrowser } from './env.js';
+import * as browserStorage from './storage.browser.js';
+import * as nodeStorage from './storage.node.js';
 
 // הגדרת סוגי הפונקציות המשותפים
 type SaveChunkFn = (key: number, chunkBlob: Blob, fileName: string) => Promise<void>;

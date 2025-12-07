@@ -1,7 +1,5 @@
 import { isBrowser } from './env';
-import * as browserProcessor from './audioProcessor.browser';
-import * as nodeProcessor from './audioProcessor.node';
-import { AudioSource } from './audioProcessor.browser';
+import type { AudioSource } from './audioProcessor.browser';
 
 // ייצוא מחדש של הממשק המשותף כדי שיהיה זמין מנקודה אחת
 export type { AudioSource };
@@ -16,11 +14,15 @@ let chunkAndStoreAudio: ChunkAndStoreAudioFn;
 
 // בחירת המימוש הנכון בזמן ריצה
 if (isBrowser) {
-    browserProcessor.createAudioContext();
-    chunkAndStoreAudio = browserProcessor.chunkAndStoreAudio;
-    
+    import('./audioProcessor.browser').then((browserProcessor) => {
+        browserProcessor.createAudioContext();
+        chunkAndStoreAudio = browserProcessor.chunkAndStoreAudio;
+    });
+
 } else {
-    chunkAndStoreAudio = nodeProcessor.chunkAndStoreAudio;
+    import('./audioProcessor.node').then((nodeProcessor) => {
+        chunkAndStoreAudio = nodeProcessor.chunkAndStoreAudio;
+    });
 }
 
 // ייצוא הפונקציה שנבחרה

@@ -12,12 +12,15 @@ if (isBrowser) {
 
 
 
-config({ path: import.meta.dirname + '/../.env' }); // התאמה לנתיב היחסי בקבצי ES Modules
 
 // אין יותר צורך בפוליפילים גלובליים.
 // המימושים הנפרדים מטפלים בהבדלי הסביבות.
 
 if (!isBrowser) {
+
+    config({ path: import.meta.dirname + '/../.env' }); // התאמה לנתיב היחסי בקבצי ES Modules
+
+
     globalThis.AudioContext || ((globalThis.AudioContext as any) = class {
         constructor(contextOptions?: AudioContextOptions) {
             throw new Error("AudioContext is not supported in Node.js. Please use a browser environment.");
@@ -35,4 +38,12 @@ if (!isBrowser) {
             throw new Error("indexedDB is not supported in Node.js. Please use a browser environment.");
         }
     });
+} else {
+    // @ts-ignore
+    globalThis.process || (globalThis.process = {});
+    globalThis.process.env ?
+        globalThis.process.env.API_KEY = import.meta.env.VITE_API_KEY :
+        (globalThis.process.env = {
+            API_KEY: import.meta.env.VITE_API_KEY,
+        });
 }
