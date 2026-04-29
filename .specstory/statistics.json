@@ -1,0 +1,58 @@
+{
+  "sessions": {
+    "64fd570a-dc49-4676-91ce-2bdefca493af": {
+      "user_message_count": 1,
+      "agent_message_count": 0,
+      "start_timestamp": "2025-11-16T14:45:47+02:00",
+      "end_timestamp": "2025-11-16T14:45:47+02:00",
+      "markdown_size_bytes": 379,
+      "provider": "copilotide",
+      "last_updated": "2026-04-29T10:07:18Z"
+    },
+    "6d7527e1-6e63-463a-b5ff-2d06a2810187": {
+      "user_message_count": 1,
+      "agent_message_count": 0,
+      "start_timestamp": "2025-11-16T14:24:05+02:00",
+      "end_timestamp": "2025-11-16T14:24:05+02:00",
+      "markdown_size_bytes": 553,
+      "provider": "copilotide",
+      "last_updated": "2026-04-29T10:07:18Z"
+    },
+    "8b18930f-56a2-43ff-8ffe-6f2acf20ca42": {
+      "user_message_count": 2,
+      "agent_message_count": 2,
+      "start_timestamp": "2025-11-16T15:56:03+02:00",
+      "end_timestamp": "2025-11-16T15:56:30+02:00",
+      "markdown_size_bytes": 752,
+      "provider": "copilotide",
+      "last_updated": "2026-04-29T10:07:18Z"
+    },
+    "b8e893c1-2f1c-4004-9e19-bcf5dbda9ba0": {
+      "user_message_count": 8,
+      "agent_message_count": 9,
+      "start_timestamp": "2025-08-21T16:21:18+03:00",
+      "end_timestamp": "2025-11-16T14:33:39+02:00",
+      "markdown_size_bytes": 7626,
+      "provider": "copilotide",
+      "last_updated": "2026-04-29T10:07:19Z"
+    },
+    "c3bf1473-f9e1-4d60-943d-d5e2a383b932": {
+      "user_message_count": 1,
+      "agent_message_count": 1,
+      "start_timestamp": "2025-11-16T14:31:49+02:00",
+      "end_timestamp": "2025-11-16T14:31:49+02:00",
+      "markdown_size_bytes": 802,
+      "provider": "copilotide",
+      "last_updated": "2026-04-29T10:07:19Z"
+    },
+    "fa75a116-700a-44cd-b007-190f2891f95e": {
+      "user_message_count": 8,
+      "agent_message_count": 8,
+      "start_timestamp": "2025-08-21T15:48:13+03:00",
+      "end_timestamp": "2025-08-21T16:11:03+03:00",
+      "markdown_size_bytes": 20172,
+      "provider": "copilotide",
+      "last_updated": "2026-04-29T10:07:19Z"
+    }
+  }
+}

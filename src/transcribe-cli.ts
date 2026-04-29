@@ -34,7 +34,7 @@ async function loadPrompt(promptPath?: string): Promise<string> {
     }
     console.log('📂 Loading default prompt...');
     // הנתיב היחסי לקובץ ברירת המחדל
-    return fs.readFile(path.join(__dirname, 'prompts', 'transcribe.md'), 'utf-8');
+    return fs.readFile(path.join(__dirname, '..', 'public', 'prompts', 'transcribe.md'), 'utf-8');
 }
 
 /**
@@ -76,15 +76,15 @@ export async function transcribe(
     // 3. קריאה לשירות התמלול עם הצגת התקדמות
     console.log('\n🚀 Starting transcription process...');
     const finalTranscript = await transcribeAudioFile(
-       audioSource,
-       prompt,
-       onProgress,
-       {
-           maxConcurrentRequests: concurrentRequests,
-           maxRetries: retries,
-           initialBackoffMs: initialBackoff
-       }
-   );
+        audioSource,
+        prompt,
+        onProgress,
+        {
+            maxConcurrentRequests: concurrentRequests,
+            maxRetries: retries,
+            initialBackoffMs: initialBackoff
+        }
+    );
 
     if (onProgress) {
         process.stdout.write('\r\n'); // שורה חדשה אחרי סיום ההתקדמות
@@ -113,10 +113,10 @@ async function main(options: {
         console.log(`⚙️  Running with ${concurrent} concurrent requests.`);
     }
     if (retries) {
-      console.log(`🔁 Max retries set to ${retries}.`);
+        console.log(`🔁 Max retries set to ${retries}.`);
     }
     if (backoff) {
-      console.log(`⏱️ Initial backoff delay set to ${backoff}ms.`);
+        console.log(`⏱️ Initial backoff delay set to ${backoff}ms.`);
     }
 
     // קריאה לפונקציית התמלול הראשית

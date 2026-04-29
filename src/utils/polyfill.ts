@@ -14,12 +14,16 @@ if (isBrowser) {
 
 
 // אין יותר צורך בפוליפילים גלובליים.
-// המימושים הנפרדים מטפלים בהבדלי הסביבות.
+// המplementationים הנפרדים מטפלים בהבדלי הסביבות.
 
 if (!isBrowser) {
 
-    config({ path: import.meta.dirname + '/../.env' }); // התאמה לנתיב היחסי בקבצי ES Modules
+    const { join } = await import('node:path');
 
+    config({ path: join(import.meta.dirname, '..', '..', '.env') }); // התאמה לנתיב היחסי בקבצי ES Modules
+
+
+    process.env.API_KEY = process.env.API_KEY || import.meta.env.VITE_API_KEY;
 
     globalThis.AudioContext || ((globalThis.AudioContext as any) = class {
         constructor(contextOptions?: AudioContextOptions) {

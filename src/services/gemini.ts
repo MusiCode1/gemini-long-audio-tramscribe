@@ -2,7 +2,7 @@ import { GoogleGenAI } from '@google/genai';
 import { ProcessingState, TranscriptionProgress } from '../types';
 import { chunkAndStoreAudio, AudioSource } from '../utils/audioProcessor';
 import { getChunk, clearAllChunks, saveChunkResult, clearAllResults } from '../utils/storage';
-import { debugLog } from '../utils/logger';
+import { debugLog, instrumentLog } from '../utils/logger';
 
 /**
 * פונקציית עזר המבצעת פעולה אסינכרונית עם מנגנון ניסיונות חוזרים והמתנה (Exponential Backoff).
@@ -22,11 +22,20 @@ async function withRetry<T>(
 ): Promise<T> {
   const { maxRetries, initialBackoffMs } = options;
   let lastError: Error | undefined;
+  // #region agent log
+  instrumentLog({location:'gemini.ts:16',message:'withRetry entered',data:{operationName,chunkIndex,maxRetries,initialBackoffMs},hypothesisId:'H1,H2,H4'});
+  // #endregion
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
+      // #region agent log
+      instrumentLog({location:'gemini.ts:26',message:'attempt started',data:{attempt,chunkIndex,operationName},hypothesisId:'H1,H2,H4'});
+      // #endregion
       return await fn();
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
+      // #region agent log
+      instrumentLog({location:'gemini.ts:29',message:'attempt failed',data:{attempt,chunkIndex,operationName,errorMsg:lastError.message,errorStack:lastError.stack},hypothesisId:'H1,H2,H3,H4'});
+      // #endregion
       // חישוב זמן המתנה עם הכפלה מעריכית, בתוספת רכיב אקראי קטן למניעת התנגשויות
       const delay = initialBackoffMs * Math.pow(2, attempt - 1) + Math.random() * 1000;
       
@@ -124,6 +133,9 @@ async function transcribeChunk(
         const displayName = `chunk_${chunkIndex}_${audioSource.fileName}`;
 
         debugLog(`Uploading chunk ${chunkIndex} to Google AI`, { resourceName, displayName });
+        // #region agent log
+        instrumentLog({location:'gemini.ts:126',message:'before upload',data:{chunkIndex,resourceName,displayName,chunkSize:chunkFile.size,chunkType:chunkFile.type},hypothesisId:'H1,H2,H5'});
+        // #endregion
         uploadedFile = await withRetry(
             () => ai.files.upload({
                 config: { name: resourceName, displayName: displayName, mimeType: chunkFile.type },
@@ -134,6 +146,9 @@ async function transcribeChunk(
             onProgress,
             retryOptions
         );
+        // #region agent log
+        instrumentLog({location:'gemini.ts:137',message:'after upload success',data:{chunkIndex,uploadedFileName:uploadedFile?.name,uploadedFileUri:uploadedFile?.uri},hypothesisId:'H1,H2'});
+        // #endregion
 
         if (!uploadedFile) {
             throw new Error("העלאת הקובץ ל-API נכשלה, לא התקבל אובייקט קובץ.");
@@ -144,6 +159,9 @@ async function transcribeChunk(
         const textPart = { text: prompt };
 
         debugLog('Calling generateContentStream with URI:', audioPart.fileData.fileUri);
+        // #region agent log
+        instrumentLog({location:'gemini.ts:146',message:'before generateContentStream',data:{chunkIndex,fileUri:audioPart.fileData.fileUri,model:'gemini-2.5-flash'},hypothesisId:'H1,H2,H3'});
+        // #endregion
         const stream = await withRetry(
             () => ai.models.generateContentStream({
                 model: 'gemini-2.5-flash',
@@ -154,6 +172,9 @@ async function transcribeChunk(
             onProgress,
             retryOptions
         );
+        // #region agent log
+        instrumentLog({location:'gemini.ts:156',message:'after generateContentStream success',data:{chunkIndex},hypothesisId:'H1,H2'});
+        // #endregion
 
         let currentChunkTranscript = '';
         for await (const chunk of stream) {
@@ -251,8 +272,14 @@ export async function transcribeAudioFile(
             }
         };
 
+        // #region agent log
+        instrumentLog({location:'gemini.ts:254',message:'starting workers',data:{maxConcurrentRequests,totalChunks,chunkIndicesCount:chunkIndices.length},hypothesisId:'H2,H5'});
+        // #endregion
         const workers = Array(maxConcurrentRequests).fill(null).map(worker);
         await Promise.all(workers);
+        // #region agent log
+        instrumentLog({location:'gemini.ts:256',message:'all workers completed',data:{completedChunks,totalChunks},hypothesisId:'H2,H5'});
+        // #endregion
 
         const failedChunks = transcripts.reduce((acc, result, index) => {
             if (result instanceof Error) {
@@ -291,6 +318,10 @@ export async function transcribeAudioFile(
     } catch (e) {
         console.error("Gemini API Error:", e);
         debugLog("Caught error in transcribeAudioFile:", e);
+        // #region agent log
+        const errObj = e instanceof Error ? {message:e.message,stack:e.stack,name:e.name} : {raw:String(e)};
+        instrumentLog({location:'gemini.ts:292',message:'caught error in transcribeAudioFile',data:{error:errObj},hypothesisId:'H1,H2,H3,H4'});
+        // #endregion
         if (e instanceof Error && e.message.includes('permission')) {
              throw new Error("שגיאת הרשאות ב-API. ודא שמפתח ה-API שלך תקף ושה-File API מופעל בפרויקט Google Cloud שלך.");
         }
